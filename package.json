@@ -1,0 +1,14 @@
+{
+  "name": "webgl-nbody-gpgpu-sim",
+  "version": "1.0.0",
+  "description": "A minimal WebGL2 GPGPU-based N-body gravitational simulator with room for hierarchical acceleration.",
+  "main": "main.js",
+  "scripts": {
+    "start": "lite-server"
+  },
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "lite-server": "^2.6.1"
+  }
+}
