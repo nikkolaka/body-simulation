@@ -3,168 +3,57 @@
 <head>
     <meta charset="UTF-8">
     <title>WebGL N-Body GPGPU Simulator</title>
-    <style>
-        html, body {
-            height: 100%; margin: 0; padding: 0; box-sizing: border-box; background: #1d1d1d; color: #eee;
-            font-family: 'Segoe UI', Arial, Verdana, Helvetica, sans-serif; font-size: 17px;
-        }
-        body { display: flex; align-items: center; justify-content: center; height: 100vh; }
-        .container { display: flex; gap: 40px; align-items: flex-start; }
-        #simWindow {
-            width: 600px; height: 600px; background: #000; box-shadow: 0 2px 12px #222;
-            display: flex; align-items: center; justify-content: center;
-        }
-        #glCanvas { width: 600px; height: 600px; display: block; background: #000; }
-        .controls {
-            display: flex; flex-direction: column; gap: 16px;
-            align-items: flex-start;
-            padding-top: 40px;
-        }
-        button {
-            padding: 12px 0;
-            font-size: 1.07em;
-            width: 180px;
-            border: none;
-            border-radius: 30px;
-            cursor: pointer;
-            box-shadow: 0 2px 9px #0007;
-            color: #fff;
-            margin: 0;
-            font-family: inherit;
-            font-weight: 500;
-            letter-spacing: 0.06em;
-        }
-        #pauseBtn      { background: #ffa726; box-shadow: 0 2px 9px #ff910020; }
-        #resumeBtn     { background: #66bb6a; box-shadow: 0 2px 9px #00c85320; }
-        #stepBtn       { background: #9575cd; box-shadow: 0 2px 9px #512da820; }
-        #restartBtn    { background: #ef5350; box-shadow: 0 2px 9px #d5000020; }
-        #drawBtn       { background: #42a5f5; box-shadow: 0 2px 9px #1976d220; }
-        button:active { filter: brightness(0.96); }
-        button.active { outline: 3px solid #ffd740; }
-        #glCanvas.drawing { cursor: crosshair; }
-        .slider-label {
-            font-size: 1.07em;
-            font-weight: 500;
-            color: #fff;
-            margin: 0 0 2px 6px;
-            letter-spacing: 0.06em;
-            text-shadow: 0 1px 1px #222a;
-            width: 180px;
-        }
-        .modern-slider {
-            width: 180px;
-            height: 38px;
-            background: none;
-            margin: 0 0 10px 0;
-            padding: 0;
-            display: block;
-        }
-        /* Custom range slider fill/track */
-        .modern-slider input[type=range] {
-            width: 100%; height: 38px; background: none; margin: 0; outline: none;
-        }
-        .modern-slider input[type=range]::-webkit-slider-runnable-track {
-            height: 18px;
-            border-radius: 9px;
-            background: linear-gradient(to right, #42a5f5 0%, #1976d2 var(--slider-pct, 0%), #292e41 var(--slider-pct, 0%), #292e41 100%);
-            box-shadow: 0 2px 9px #0d47a120,0 0.5px 1px #0001;
-        }
-        .modern-slider.speed input[type=range]::-webkit-slider-runnable-track {
-            background: linear-gradient(to right, #ffa726 0%, #ffd740 var(--slider-pct, 0%), #292e41 var(--slider-pct, 0%), #292e41 100%);
-        }
-        .modern-slider input[type=range]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 30px; height: 30px; border-radius: 50%;
-            margin-top: -6px; /* Vertically center: (track=18, thumb=30)=(18-30)/2=-6px */
-            background: #1e293b; border: 3px solid #42a5f5;
-            box-shadow: 0 2px 7px #42a5f570;
-            position: relative;
-        }
-        .modern-slider.speed input[type=range]::-webkit-slider-thumb {
-            border: 3px solid #ffd740;
-            background: #ffecb3;
-        }
-        .modern-slider input[type=range]:focus::-webkit-slider-thumb {
-            border-color: #ffd740; background: #233c57;
-        }
-        .modern-slider input[type=range]:focus { outline: none; }
-        /* Firefox */
-        .modern-slider input[type=range]::-moz-range-thumb {
-            width: 30px; height: 30px; border-radius: 50%;
-            background: #1e293b; border: 3px solid #42a5f5; box-shadow: 0 2px 7px #42a5f570;
-        }
-        .modern-slider.speed input[type=range]::-moz-range-thumb {
-            border: 3px solid #ffd740; background: #ffecb3;
-        }
-        .modern-slider input[type=range]:focus::-moz-range-thumb {
-            border-color: #ffd740; background: #233c57;
-        }
-        .modern-slider input[type=range]::-moz-range-track {
-            height: 18px; border-radius: 9px;
-            background: linear-gradient(to right, #42a5f5 0%, #1976d2 var(--slider-pct, 0%), #292e41 var(--slider-pct, 0%), #292e41 100%);
-        }
-        .modern-slider.speed input[type=range]::-moz-range-track {
-            background: linear-gradient(to right, #ffa726 0%, #ffd740 var(--slider-pct, 0%), #292e41 var(--slider-pct, 0%), #292e41 100%);
-        }
-        .modern-slider input[type=range]::-ms-fill-lower {
-            background: #42a5f5; border-radius: 9px;
-        }
-        .modern-slider input[type=range]::-ms-fill-upper {
-            background: #292e41; border-radius: 9px;
-        }
-        .modern-slider.speed input[type=range]::-ms-fill-lower {
-            background: #ffa726; }
-        .modern-slider.speed input[type=range]::-ms-fill-upper {
-            background: #292e41; }
-        .modern-slider input[type=range]:focus { outline: none; }
-        .modern-slider input[type=range]::-webkit-slider-thumb:focus { outline: none; }
-    </style>
+    <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-    <div class="container">
-        <div id="simWindow"><canvas id="glCanvas" width="600" height="600"></canvas></div>
-        <div class="controls">
-            <button id="pauseBtn">Pause</button>
-            <button id="resumeBtn">Resume</button>
-            <button id="stepBtn">Step</button>
-            <button id="restartBtn">Restart</button>
-            <button id="drawBtn">Draw Bodies</button>
-            <label class="slider-label"><span id="bodyCountLabel">50</span> Bodies</label>
-            <div class="modern-slider">
-                <input type="range" id="bodyCountSlider" min="1" max="1024" value="50" step="1">
+<body class="min-h-screen bg-[#05070b] text-slate-100 flex items-center justify-center p-6 font-['Segoe_UI',_sans-serif]">
+    <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-14 w-full max-w-6xl">
+        <div class="w-[600px] h-[600px] bg-[#0f131a] rounded-3xl shadow-2xl shadow-black/70 flex items-center justify-center border-4 border-slate-700">
+            <canvas id="glCanvas" class="w-full h-full rounded-2xl bg-[#0b0f16]" width="600" height="600"></canvas>
+        </div>
+
+        <div class="flex w-full max-w-xs flex-col gap-4">
+            <button id="pauseBtn" class="w-full rounded-2xl py-3 text-lg font-semibold tracking-wide text-white shadow-lg shadow-black/60 transition hover:opacity-90 border border-slate-600" style="background-image: url('https://www.transparenttextures.com/patterns/stone-wall.png'), linear-gradient(145deg,#f97316,#fbbf24);">Pause</button>
+            <button id="resumeBtn" class="w-full rounded-2xl py-3 text-lg font-semibold tracking-wide text-white shadow-lg shadow-black/60 transition hover:opacity-90 border border-slate-600" style="background-image: url('https://www.transparenttextures.com/patterns/stone-wall.png'), linear-gradient(145deg,#22c55e,#bef264);">Resume</button>
+            <button id="stepBtn" class="w-full rounded-2xl py-3 text-lg font-semibold tracking-wide text-white shadow-lg shadow-black/60 transition hover:opacity-90 border border-slate-600" style="background-image: url('https://www.transparenttextures.com/patterns/stone-wall.png'), linear-gradient(145deg,#a855f7,#c084fc);">Step</button>
+            <button id="restartBtn" class="w-full rounded-2xl py-3 text-lg font-semibold tracking-wide text-white shadow-lg shadow-black/60 transition hover:opacity-90 border border-slate-600" style="background-image: url('https://www.transparenttextures.com/patterns/stone-wall.png'), linear-gradient(145deg,#fb7185,#fda4af);">Start</button>
+            <button id="drawBtn" class="w-full rounded-2xl py-3 text-lg font-semibold tracking-wide text-white shadow-lg shadow-black/60 transition hover:opacity-90 border border-slate-600" style="background-image: url('https://www.transparenttextures.com/patterns/stone-wall.png'), linear-gradient(145deg,#38bdf8,#7dd3fc);">Draw Bodies</button>
+
+            <div class="mt-4 space-y-2">
+                <div class="flex items-center justify-between text-sm uppercase tracking-[0.2em] text-slate-500">
+                    <span>Starting Bodies</span>
+                    <span id="bodyCountLabel" class="text-base font-semibold text-white">50</span>
+                </div>
+                <input type="range" id="bodyCountSlider" min="1" max="1024" value="50" step="1"
+                       class="w-full cursor-pointer accent-sky-400 h-2 rounded-full bg-slate-700">
             </div>
-            <label class="slider-label" style="margin-top:4px;"><span id="speedLabel">1.0</span>× Speed</label>
-            <div class="modern-slider speed">
-                <input type="range" id="speedSlider" min="1" max="40" value="10" step="1">
+
+            <div class="space-y-2">
+                <div class="flex items-center justify-between text-sm uppercase tracking-[0.2em] text-slate-400">
+                    <span>Speed</span>
+                    <span><span id="speedLabel" class="text-base font-semibold text-white">1.0</span>×</span>
+                </div>
+                <input type="range" id="speedSlider" min="1" max="20" value="10" step="1"
+                       class="w-full cursor-pointer accent-amber-400 h-2 rounded-full bg-slate-700">
             </div>
         </div>
     </div>
+
     <script src="main.js"></script>
     <script>
-    window.addEventListener('DOMContentLoaded',()=>{
-      // Bodies slider
-      let s = document.getElementById('bodyCountSlider');
-      let l = document.getElementById('bodyCountLabel');
-      function updateSliderFill() {
-        let v = Number(s.value);
-        l.textContent = v;
-        let pct = 100*(v-1)/(1024-1);
-        s.style.setProperty('--slider-pct', pct + '%');
-      }
-      s.addEventListener('input', updateSliderFill);
-      updateSliderFill();
-      // Speed slider
-      let ss = document.getElementById('speedSlider');
-      let sl = document.getElementById('speedLabel');
-      function updateSpeedFill() {
-        let v = Number(ss.value);
-        let pct = 100*(v-1)/(40-1);
-        ss.style.setProperty('--slider-pct', pct + '%');
-        sl.textContent = (v/10).toFixed(1);
-      }
-      ss.addEventListener('input', updateSpeedFill);
-      updateSpeedFill();
-    });
+      window.addEventListener('DOMContentLoaded', () => {
+        const bodySlider = document.getElementById('bodyCountSlider');
+        const bodyLabel = document.getElementById('bodyCountLabel');
+        const speedSlider = document.getElementById('speedSlider');
+        const speedLabel = document.getElementById('speedLabel');
+
+        const updateBodyLabel = () => bodyLabel.textContent = bodySlider.value;
+        const updateSpeedLabel = () => speedLabel.textContent = (Number(speedSlider.value) / 10).toFixed(1);
+
+        bodySlider.addEventListener('input', updateBodyLabel);
+        speedSlider.addEventListener('input', updateSpeedLabel);
+        updateBodyLabel();
+        updateSpeedLabel();
+      });
     </script>
 </body>
 </html>

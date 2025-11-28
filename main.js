@@ -201,11 +201,11 @@ precision highp float;
 in float vSpeed;
 out vec4 col;
 void main(){
-    float lo = 0.0, hi = 0.03;
+    // lower hi so bodies shift blue with less speed
+    float lo = 0.0;
+    float hi = 0.015;
     float t = clamp((vSpeed-lo)/(hi-lo), 0.0, 1.0);
-    // Red for slow, blue for fast
     col = vec4(1.0-t, 0.0, t, 1.0);
-    // Make discs, not squares
     vec2 c = gl_PointCoord-vec2(0.5);
     if (dot(c,c) > 0.25) discard;
 }
@@ -308,17 +308,20 @@ function getSimSpeed() {
 }
 // UI wiring
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('pauseBtn').onclick = pause;
-    document.getElementById('resumeBtn').onclick = resume;
-    document.getElementById('stepBtn').onclick = stepSim;
-    document.getElementById('restartBtn').onclick = restartSim;
-    let slider = document.getElementById('bodyCountSlider');
-    let label = document.getElementById('bodyCountLabel');
-    if (slider && label) {
-        slider.value = '50'; label.textContent = '50'; userBodyCount = 50;
-        slider.addEventListener('input', e => {
-            label.textContent = slider.value;
-            userBodyCount = Number(slider.value);
+    const bindClick = (id, handler) => {
+        const el = document.getElementById(id);
+        if (el) el.addEventListener('click', handler);
+    };
+    bindClick('pauseBtn', pause);
+    bindClick('resumeBtn', resume);
+    bindClick('stepBtn', stepSim);
+    bindClick('restartBtn', restartSim);
+
+    const drawButton = document.getElementById('drawBtn');
+    if (drawButton) {
+        drawButton.addEventListener('click', () => {
+            if (isDrawingMode) disableDrawMode();
+            else enableDrawMode();
         });
     }
 });
@@ -329,22 +332,16 @@ let isMouseDown = false;
 
 function enableDrawMode() {
     isDrawingMode = true;
-    document.getElementById('drawBtn').classList.add('active');
-    canvas.classList.add('drawing');
+    const btn = document.getElementById('drawBtn');
+    if (btn) btn.classList.add('ring-4','ring-yellow-300','ring-offset-2','ring-offset-slate-900');
+    canvas.classList.add('cursor-crosshair');
 }
 function disableDrawMode() {
     isDrawingMode = false;
-    document.getElementById('drawBtn').classList.remove('active');
-    canvas.classList.remove('drawing');
+    const btn = document.getElementById('drawBtn');
+    if (btn) btn.classList.remove('ring-4','ring-yellow-300','ring-offset-2','ring-offset-slate-900');
+    canvas.classList.remove('cursor-crosshair');
 }
-
-// Toggle Draw Bodies mode
-document.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('drawBtn').onclick = function() {
-        if (!isDrawingMode) enableDrawMode();
-        else disableDrawMode();
-    };
-});
 
 function canvasToSimCoords(ev) {
     const rect = canvas.getBoundingClientRect();
