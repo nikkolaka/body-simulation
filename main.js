@@ -193,7 +193,7 @@ void main() {
     vec4 vel = texelFetch(uVel, ivec2(int(x),int(y)), 0);
     vSpeed = length(vel.xy);
     gl_Position = vec4(pos.xy, 0, 1);
-    gl_PointSize = 7.0;
+    gl_PointSize = 12.0;
 }
 `;
 const drawFS = `#version 300 es
