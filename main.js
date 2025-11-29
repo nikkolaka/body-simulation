@@ -269,8 +269,8 @@ uniform sampler2D uVel;
 uniform float uN;
 uniform float uSide;
 uniform float uDT;
+uniform float uG;
 
-#define G 0.000003
 #define SOFTEN 0.02
 #define DAMP 0.997
 void main(){
@@ -285,7 +285,7 @@ void main(){
             float dy = other.y-myPos.y;
             float distSqr = dx*dx+dy*dy+SOFTEN;
             float invDist = 1.0/sqrt(distSqr);
-            float f = (G * other.w) * invDist * invDist;
+            float f = (uG * other.w) * invDist * invDist;
             if(distSqr>0.0) {
                 force.x += dx * f;
                 force.y += dy * f;
@@ -497,7 +497,7 @@ function handleBorderDestruction() {
     gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.deleteFramebuffer(tempFB);
-    
+
     // Find bodies destroyed at borders (mass = 0)
     const borderDestroyedBodies = [];
     for (let i = 0; i < activeBodies; ++i) {
@@ -512,39 +512,39 @@ function handleBorderDestruction() {
             }
         }
     }
-    
+
     if (borderDestroyedBodies.length === 0) return;
-    
+
     if (evolveMode) {
         // Spawn new bodies for each border-destroyed body
         for (const idx of borderDestroyedBodies) {
             // Random position on map
             const px = (Math.random() * 2 - 1) * 0.9; // Keep within bounds
             const py = (Math.random() * 2 - 1) * 0.9;
-            
+
             // Strong initial impulse to escape coalesced masses
             const angle = Math.random() * 2 * Math.PI;
             const speed = 0.02 + Math.random() * 0.02; // Strong speed range (0.02-0.04)
             const vx = Math.cos(angle) * speed;
             const vy = Math.sin(angle) * speed;
-            
+
             // Reuse the destroyed body slot
             posData[idx * 4] = px;
             posData[idx * 4 + 1] = py;
             posData[idx * 4 + 2] = 0.0;
             posData[idx * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
-            
+
             velData[idx * 4] = vx;
             velData[idx * 4 + 1] = vy;
             velData[idx * 4 + 2] = 0.0;
             velData[idx * 4 + 3] = 0.0;
-            
+
             // Track spawn
             spawnCount++;
         }
     }
     // If not in evolve mode, bodies are just destroyed (mass already set to 0)
-    
+
     // Update textures with modified data
     gl.bindTexture(gl.TEXTURE_2D, curPosTex);
     gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
@@ -558,7 +558,7 @@ function handleBorderDestruction() {
 
 function handleCollisions() {
     if (!evolveMode) return;
-    
+
     // Run collision detection pass
     gl.useProgram(collisionProg);
     gl.bindFramebuffer(gl.FRAMEBUFFER, collisionFB);
@@ -576,10 +576,10 @@ function handleCollisions() {
     gl.uniform1f(gl.getUniformLocation(collisionProg, 'uActiveBodies'), activeBodies);
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disableVertexAttribArray(loc);
-    
+
     // Read collision results back to CPU
     gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, collisionData);
-    
+
     // Read current position and velocity data
     let tempFB = gl.createFramebuffer();
     gl.bindFramebuffer(gl.FRAMEBUFFER, tempFB);
@@ -589,7 +589,7 @@ function handleCollisions() {
     gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
     gl.deleteFramebuffer(tempFB);
-    
+
     // Process collisions: destroy slower bodies and spawn new ones
     const bodiesToDestroy = [];
     for (let i = 0; i < activeBodies; ++i) {
@@ -599,7 +599,7 @@ function handleCollisions() {
             bodiesToDestroy.push(i);
         }
     }
-    
+
     // Destroy bodies (set mass to 0)
     for (const idx of bodiesToDestroy) {
         posData[idx * 4 + 3] = 0.0; // Set mass to 0
@@ -608,35 +608,35 @@ function handleCollisions() {
         velData[idx * 4 + 2] = 0.0;
         velData[idx * 4 + 3] = 0.0;
     }
-    
+
     // Spawn new bodies for each destroyed body
     for (const idx of bodiesToDestroy) {
         // Random position on map
         const px = (Math.random() * 2 - 1) * 0.9; // Keep within bounds
         const py = (Math.random() * 2 - 1) * 0.9;
-        
+
         // Strong initial impulse to escape coalesced masses
         // Increased significantly to counteract gravitational pull from clusters
         const angle = Math.random() * 2 * Math.PI;
         const speed = 0.02 + Math.random() * 0.02; // Strong speed range (0.02-0.04)
         const vx = Math.cos(angle) * speed;
         const vy = Math.sin(angle) * speed;
-        
+
         // Reuse the destroyed body slot
         posData[idx * 4] = px;
         posData[idx * 4 + 1] = py;
         posData[idx * 4 + 2] = 0.0;
         posData[idx * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
-        
+
         velData[idx * 4] = vx;
         velData[idx * 4 + 1] = vy;
         velData[idx * 4 + 2] = 0.0;
         velData[idx * 4 + 3] = 0.0;
-        
+
         // Track spawn
         spawnCount++;
     }
-    
+
     // Update textures with modified data
     if (bodiesToDestroy.length > 0) {
         gl.bindTexture(gl.TEXTURE_2D, curPosTex);
@@ -666,6 +666,7 @@ function step(dt) {
     gl.uniform1f(gl.getUniformLocation(velProg, 'uN'), N);
     gl.uniform1f(gl.getUniformLocation(velProg, 'uSide'), side);
     gl.uniform1f(gl.getUniformLocation(velProg, 'uDT'), dt);
+    gl.uniform1f(gl.getUniformLocation(velProg, 'uG'), getGravity());
     gl.drawArrays(gl.TRIANGLES, 0, 6);
     gl.disableVertexAttribArray(loc);
     // Update positions (write to nextPosFB, read from curPosTex, nextVelTex)
@@ -689,10 +690,10 @@ function step(dt) {
     [curVelFB, nextVelFB] = [nextVelFB, curVelFB];
     [curPosTex, nextPosTex] = [nextPosTex, curPosTex];
     [curPosFB, nextPosFB] = [nextPosFB, curPosFB];
-    
+
     // Handle border destruction (bodies that hit borders)
     handleBorderDestruction();
-    
+
     // Handle collisions in Evolve mode
     handleCollisions();
 }
@@ -731,6 +732,15 @@ function getSimSpeed() {
     return Number(slider.value) / 100.0; // Now supports up to 4.0x (400/100)
 }
 
+function getGravity() {
+    const slider = document.getElementById('gravitySlider');
+    if (!slider) return 0.000003;
+    // Slider 0-100, default 30 (3.0 micro).
+    // Value 30 -> 0.000003
+    // So value * 0.0000001
+    return Number(slider.value) * 0.0000001;
+}
+
 function resetSpawnRate() {
     spawnCount = 0;
     lastSpawnTime = performance.now();
@@ -744,12 +754,12 @@ function resetSpawnRate() {
 function updateSpawnRate() {
     const now = performance.now();
     const elapsed = now - lastSpawnTime;
-    
+
     if (elapsed >= SPAWN_RATE_UPDATE_INTERVAL) {
         spawnRate = (spawnCount / elapsed) * 1000; // Convert to per second
         spawnCount = 0;
         lastSpawnTime = now;
-        
+
         // Update UI
         const spawnRateElement = document.getElementById('spawnRateDisplay');
         if (spawnRateElement) {
@@ -803,7 +813,7 @@ window.addEventListener('DOMContentLoaded', () => {
             else enableDrawMode();
         });
     }
-    
+
     const evolveButton = document.getElementById('evolveBtn');
     if (evolveButton) {
         evolveButton.addEventListener('click', () => {

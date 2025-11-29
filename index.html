@@ -83,7 +83,9 @@
                     <div
                         class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
                         <span>Bodies</span>
-                        <span id="bodyCountLabel" class="text-sm font-mono text-indigo-300">50</span>
+                        <input type="number" id="bodyCountInput"
+                            class="text-sm font-mono text-indigo-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-indigo-500 appearance-none"
+                            value="50">
                     </div>
                     <input type="range" id="bodyCountSlider" min="1" max="1024" value="50" step="1"
                         class="w-full cursor-pointer accent-indigo-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
@@ -93,10 +95,30 @@
                     <div
                         class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
                         <span>Speed</span>
-                        <span class="font-mono text-emerald-300"><span id="speedLabel">1.0</span>×</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="speedInput"
+                                class="text-sm font-mono text-emerald-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-emerald-500 appearance-none"
+                                value="1.00" step="0.01">
+                            <span class="text-sm font-mono text-emerald-300">×</span>
+                        </div>
                     </div>
                     <input type="range" id="speedSlider" min="0" max="400" value="100" step="1"
                         class="w-full cursor-pointer accent-emerald-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
+                </div>
+
+                <div class="space-y-2 pt-2">
+                    <div
+                        class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
+                        <span>Gravity</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="gravityInput"
+                                class="text-sm font-mono text-amber-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-amber-500 appearance-none"
+                                value="3.0" step="0.1">
+                            <span class="text-sm font-mono text-amber-300">µ</span>
+                        </div>
+                    </div>
+                    <input type="range" id="gravitySlider" min="0" max="500" value="30" step="1"
+                        class="w-full cursor-pointer accent-amber-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
                 </div>
             </div>
         </div>
@@ -105,18 +127,47 @@
     <script src="main.js"></script>
     <script>
         window.addEventListener('DOMContentLoaded', () => {
-            const bodySlider = document.getElementById('bodyCountSlider');
-            const bodyLabel = document.getElementById('bodyCountLabel');
-            const speedSlider = document.getElementById('speedSlider');
-            const speedLabel = document.getElementById('speedLabel');
+            const setupControl = (sliderId, inputId, scale, fixed) => {
+                const slider = document.getElementById(sliderId);
+                const input = document.getElementById(inputId);
 
-            const updateBodyLabel = () => bodyLabel.textContent = bodySlider.value;
-            const updateSpeedLabel = () => speedLabel.textContent = (Number(speedSlider.value) / 100).toFixed(2);
+                const updateInput = () => {
+                    input.value = (Number(slider.value) * scale).toFixed(fixed);
+                };
 
-            bodySlider.addEventListener('input', updateBodyLabel);
-            speedSlider.addEventListener('input', updateSpeedLabel);
-            updateBodyLabel();
-            updateSpeedLabel();
+                const updateSlider = () => {
+                    let val = Number(input.value) / scale;
+                    const max = Number(slider.max);
+                    const min = Number(slider.min);
+
+                    if (val > max) {
+                        val = max;
+                        input.value = (val * scale).toFixed(fixed);
+                    } else if (val < min) {
+                        val = min;
+                        input.value = (val * scale).toFixed(fixed);
+                    }
+                    slider.value = val;
+                    // Trigger input event on slider so main.js or other listeners know it changed
+                    slider.dispatchEvent(new Event('input'));
+                };
+
+                slider.addEventListener('input', updateInput);
+                input.addEventListener('change', updateSlider);
+                input.addEventListener('keydown', (e) => {
+                    if (e.key === 'Enter') {
+                        updateSlider();
+                        input.blur();
+                    }
+                });
+
+                // Initial update
+                updateInput();
+            };
+
+            setupControl('bodyCountSlider', 'bodyCountInput', 1, 0);
+            setupControl('speedSlider', 'speedInput', 0.01, 2);
+            setupControl('gravitySlider', 'gravityInput', 0.1, 1);
         });
     </script>
 </body>
