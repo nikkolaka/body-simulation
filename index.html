@@ -11,10 +11,16 @@
     class="min-h-screen bg-emerald-950 text-slate-800 flex items-center justify-center p-6 font-['Segoe_UI',_sans-serif]">
     <div class="flex flex-col gap-10 lg:flex-row lg:items-start lg:gap-14 w-full max-w-6xl">
         <!-- Simulation Window -->
-        <div
-            class="w-[600px] h-[600px] bg-[#FDFBF7] rounded-[2.5rem] shadow-2xl shadow-black/50 flex items-center justify-center border border-[#ECEAE5] relative overflow-hidden">
-            <canvas id="glCanvas" class="w-full h-full rounded-[2.0rem] m-2 bg-[#FDFBF7]" width="600"
-                height="600"></canvas>
+        <div class="flex flex-col items-center gap-2">
+            <div
+                class="w-[600px] h-[600px] bg-[#FDFBF7] rounded-[2.5rem] shadow-2xl shadow-black/50 flex items-center justify-center border border-[#ECEAE5] relative overflow-hidden">
+                <canvas id="glCanvas" class="w-full h-full rounded-[2.0rem] m-2 bg-[#FDFBF7]" width="600"
+                    height="600"></canvas>
+            </div>
+            <!-- Spawn Rate Display -->
+            <div class="text-xs text-slate-400/70 font-mono tracking-wider">
+                Spawn Rate: <span id="spawnRateDisplay" class="text-emerald-300">0.00</span> /s
+            </div>
         </div>
 
         <!-- Controls -->
@@ -29,6 +35,9 @@
             <button id="stepBtn"
                 class="w-full rounded-xl py-3 text-sm font-bold uppercase tracking-wider text-white bg-violet-600 hover:bg-violet-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-violet-900/20">Step
                 Frame</button>
+
+            <button id="clearBtn"
+                class="w-full rounded-xl py-3 text-sm font-bold uppercase tracking-wider text-white bg-red-600 hover:bg-red-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-red-900/20">Clear</button>
 
             <div class="grid grid-cols-2 gap-3">
                 <!-- Split Start Button -->
@@ -66,6 +75,9 @@
                     class="col-span-1 rounded-xl py-3 text-sm font-bold uppercase tracking-wider text-white bg-sky-600 hover:bg-sky-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-sky-900/20">Draw</button>
             </div>
 
+            <button id="evolveBtn"
+                class="w-full rounded-xl py-3 text-sm font-bold uppercase tracking-wider text-white bg-amber-600 hover:bg-amber-500 hover:scale-105 active:scale-95 transition-all shadow-lg shadow-amber-900/20">Evolve</button>
+
             <div class="mt-6 space-y-3 bg-slate-800/50 p-5 rounded-2xl border border-slate-700/50">
                 <div class="space-y-2">
                     <div
@@ -83,7 +95,7 @@
                         <span>Speed</span>
                         <span class="font-mono text-emerald-300"><span id="speedLabel">1.0</span>×</span>
                     </div>
-                    <input type="range" id="speedSlider" min="0" max="100" value="100" step="1"
+                    <input type="range" id="speedSlider" min="0" max="400" value="100" step="1"
                         class="w-full cursor-pointer accent-emerald-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
                 </div>
             </div>

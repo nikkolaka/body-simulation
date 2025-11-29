@@ -65,13 +65,23 @@ function toDormant() {
 // Pattern State
 let currentPattern = 'random';
 
+// Evolve mode state
+let evolveMode = false;
+const COLLISION_RADIUS = 0.01; // Collision detection radius
+
+// Spawn rate tracking
+let spawnCount = 0;
+let lastSpawnTime = performance.now();
+let spawnRate = 0.0; // spawns per second
+const SPAWN_RATE_UPDATE_INTERVAL = 1000; // Update every second
+
 // Pattern Generators
 function initRandom(start, pos, vel) {
     for (let i = 0; i < start; ++i) {
         pos[i * 4] = Math.random() * 2 - 1;
         pos[i * 4 + 1] = Math.random() * 2 - 1;
         pos[i * 4 + 2] = 0.0;
-        pos[i * 4 + 3] = 1.0 + Math.random();
+        pos[i * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
 
         // Tangential velocity for CCW rotation
         // v_tan = k / (r + 0.1)
@@ -111,7 +121,7 @@ function initGalaxy(start, pos, vel) {
         pos[i * 4] = x + noiseX;
         pos[i * 4 + 1] = y + noiseY;
         pos[i * 4 + 2] = 0.0;
-        pos[i * 4 + 3] = 1.0 + Math.random();
+        pos[i * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
 
         // Orbital velocity approximation
         const v = 0.015 / (Math.sqrt(dist) + 0.1);
@@ -129,7 +139,7 @@ function initSphere(start, pos, vel) {
         pos[i * 4] = r * Math.cos(theta);
         pos[i * 4 + 1] = r * Math.sin(theta);
         pos[i * 4 + 2] = 0.0;
-        pos[i * 4 + 3] = 1.0 + Math.random();
+        pos[i * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
 
         // Tangential velocity
         const x = pos[i * 4];
@@ -159,7 +169,7 @@ function initGrid(start, pos, vel) {
         pos[i * 4] = -0.8 + col * spacing;
         pos[i * 4 + 1] = -0.8 + row * spacing;
         pos[i * 4 + 2] = 0.0;
-        pos[i * 4 + 3] = 1.0 + Math.random();
+        pos[i * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
 
         // Tangential velocity
         const x = pos[i * 4];
@@ -180,8 +190,24 @@ function initGrid(start, pos, vel) {
     }
 }
 
+function clearBodies() {
+    toDormant();
+    resetSpawnRate();
+    // Update textures with cleared data
+    gl.bindTexture(gl.TEXTURE_2D, curPosTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.bindTexture(gl.TEXTURE_2D, nextPosTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.bindTexture(gl.TEXTURE_2D, curVelTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    gl.bindTexture(gl.TEXTURE_2D, nextVelTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    console.log('Cleared all bodies');
+}
+
 function restartSim() {
     toDormant();
+    resetSpawnRate();
     let slider = document.getElementById('bodyCountSlider');
     let start = Math.min(Number(slider ? slider.value : 50), N);
 
@@ -244,7 +270,7 @@ uniform float uN;
 uniform float uSide;
 uniform float uDT;
 
-#define G 0.00001
+#define G 0.000003
 #define SOFTEN 0.02
 #define DAMP 0.997
 void main(){
@@ -290,12 +316,101 @@ void main(){
     vec4 pos = texelFetch(uPos, uv, 0);
     vec4 vel = texelFetch(uVel, uv, 0);
     vec2 npos = pos.xy + vel.xy * uDT;
-    // Clamp/bounce at edges
-    if (npos.x < -1.0) { npos.x = -1.0; vel.x *= -0.7; }
-    if (npos.x >  1.0) { npos.x =  1.0; vel.x *= -0.7; }
-    if (npos.y < -1.0) { npos.y = -1.0; vel.y *= -0.7; }
-    if (npos.y >  1.0) { npos.y =  1.0; vel.y *= -0.7; }
-    outPos = vec4(npos, 0, pos.w); // keep mass in .w
+    float mass = pos.w;
+    // Destroy bodies that hit the border (set mass to 0)
+    if (npos.x < -1.0 || npos.x > 1.0 || npos.y < -1.0 || npos.y > 1.0) {
+        mass = 0.0; // Destroy body
+    }
+    outPos = vec4(npos, 0, mass);
+}
+`;
+
+// Fragment shader: collision detection (marks slower bodies for destruction)
+const collisionFS = `#version 300 es
+precision highp float;
+in vec2 vUV;
+out vec4 outCollision; // .x = shouldDestroy (1.0 if yes, 0.0 if no), .y = mySpeed, .z = otherSpeed, .w = otherIndex
+uniform sampler2D uPos;
+uniform sampler2D uVel;
+uniform float uSide;
+uniform float uCollisionRadius;
+uniform float uActiveBodies;
+void main(){
+    ivec2 uv = ivec2(vUV * uSide);
+    int sideInt = int(uSide);
+    int idx = uv.y * sideInt + uv.x;
+    if (float(idx) >= uActiveBodies) {
+        outCollision = vec4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+    
+    vec4 myPos = texelFetch(uPos, uv, 0);
+    vec4 myVel = texelFetch(uVel, uv, 0);
+    
+    // Skip if already destroyed (mass = 0)
+    if (myPos.w <= 0.0) {
+        outCollision = vec4(0.0, 0.0, 0.0, 0.0);
+        return;
+    }
+    
+    float mySpeed = length(myVel.xy);
+    float shouldDestroy = 0.0;
+    float maxOtherSpeed = 0.0;
+    float colliderIdx = -1.0;
+    
+    // Check collisions with all other bodies
+    for(int x=0; x<sideInt; ++x) {
+        for(int y=0; y<sideInt; ++y) {
+            int otherIdx = y * sideInt + x;
+            if (otherIdx == idx) continue; // Skip self
+            if (float(otherIdx) >= uActiveBodies) continue;
+            
+            vec4 otherPos = texelFetch(uPos, ivec2(x,y), 0);
+            vec4 otherVel = texelFetch(uVel, ivec2(x,y), 0);
+            
+            // Skip if other is destroyed
+            if (otherPos.w <= 0.0) continue;
+            
+            float dx = otherPos.x - myPos.x;
+            float dy = otherPos.y - myPos.y;
+            float distSqr = dx*dx + dy*dy;
+            float dist = sqrt(distSqr);
+            
+            // Check if collision occurred
+            if (dist < uCollisionRadius && dist > 0.001) {
+                float otherSpeed = length(otherVel.xy);
+                float speedDiff = abs(otherSpeed - mySpeed);
+                float speedThreshold = 0.0001; // Very small threshold for "equal" speeds
+                
+                // Determine which body to destroy:
+                // If speeds are very similar (within threshold), destroy the lighter body
+                // Otherwise, destroy the slower body
+                bool shouldDestroyThis = false;
+                
+                if (speedDiff < speedThreshold) {
+                    // Speeds are essentially equal - destroy lighter body
+                    if (otherPos.w > myPos.w) {
+                        shouldDestroyThis = true;
+                    }
+                } else {
+                    // Speeds differ - destroy slower body
+                    if (otherSpeed > mySpeed) {
+                        shouldDestroyThis = true;
+                    }
+                }
+                
+                if (shouldDestroyThis) {
+                    shouldDestroy = 1.0;
+                    if (otherSpeed > maxOtherSpeed) {
+                        maxOtherSpeed = otherSpeed;
+                        colliderIdx = float(otherIdx);
+                    }
+                }
+            }
+        }
+    }
+    
+    outCollision = vec4(shouldDestroy, mySpeed, maxOtherSpeed, colliderIdx);
 }
 `;
 
@@ -348,6 +463,12 @@ void main(){
 const velProg = createProgram(quadVS, velFS);
 const posProg = createProgram(quadVS, posFS);
 const drawProg = createProgram(drawVS, drawFS);
+const collisionProg = createProgram(quadVS, collisionFS);
+
+// Collision detection texture and framebuffer
+let collisionTex = createTexture(side, side, null);
+let collisionFB = createFBO(collisionTex);
+let collisionData = new Float32Array(side * side * 4);
 
 // Setup VAOs/buffers
 const idxData = new Float32Array(N);
@@ -365,6 +486,169 @@ gl.bindVertexArray(null);
 // Remove all step back code. No HISTORY_LENGTH, histIdx, histSize, positionHistory, velocityHistory, saveHistory, restoreHistory, or any related logic.
 // Remove the event hookup for 'stepBackBtn' as well.
 // Clean logic regarding history in the step() function: omit saveHistory();
+
+function handleBorderDestruction() {
+    // Read current position and velocity data to check for border destruction
+    let tempFB = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tempFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, curPosTex, 0);
+    gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, curVelTex, 0);
+    gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(tempFB);
+    
+    // Find bodies destroyed at borders (mass = 0)
+    const borderDestroyedBodies = [];
+    for (let i = 0; i < activeBodies; ++i) {
+        const idx = i * 4;
+        const mass = posData[idx + 3];
+        if (mass <= 0.0) {
+            // Check if it was destroyed at border (position is at or beyond boundary)
+            const px = posData[idx];
+            const py = posData[idx + 1];
+            if (px <= -1.0 || px >= 1.0 || py <= -1.0 || py >= 1.0) {
+                borderDestroyedBodies.push(i);
+            }
+        }
+    }
+    
+    if (borderDestroyedBodies.length === 0) return;
+    
+    if (evolveMode) {
+        // Spawn new bodies for each border-destroyed body
+        for (const idx of borderDestroyedBodies) {
+            // Random position on map
+            const px = (Math.random() * 2 - 1) * 0.9; // Keep within bounds
+            const py = (Math.random() * 2 - 1) * 0.9;
+            
+            // Strong initial impulse to escape coalesced masses
+            const angle = Math.random() * 2 * Math.PI;
+            const speed = 0.02 + Math.random() * 0.02; // Strong speed range (0.02-0.04)
+            const vx = Math.cos(angle) * speed;
+            const vy = Math.sin(angle) * speed;
+            
+            // Reuse the destroyed body slot
+            posData[idx * 4] = px;
+            posData[idx * 4 + 1] = py;
+            posData[idx * 4 + 2] = 0.0;
+            posData[idx * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
+            
+            velData[idx * 4] = vx;
+            velData[idx * 4 + 1] = vy;
+            velData[idx * 4 + 2] = 0.0;
+            velData[idx * 4 + 3] = 0.0;
+            
+            // Track spawn
+            spawnCount++;
+        }
+    }
+    // If not in evolve mode, bodies are just destroyed (mass already set to 0)
+    
+    // Update textures with modified data
+    gl.bindTexture(gl.TEXTURE_2D, curPosTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.bindTexture(gl.TEXTURE_2D, nextPosTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.bindTexture(gl.TEXTURE_2D, curVelTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    gl.bindTexture(gl.TEXTURE_2D, nextVelTex);
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+}
+
+function handleCollisions() {
+    if (!evolveMode) return;
+    
+    // Run collision detection pass
+    gl.useProgram(collisionProg);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, collisionFB);
+    gl.viewport(0, 0, side, side);
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadVBO);
+    const loc = gl.getAttribLocation(collisionProg, 'aPos');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, curPosTex);
+    gl.uniform1i(gl.getUniformLocation(collisionProg, 'uPos'), 0);
+    gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, curVelTex);
+    gl.uniform1i(gl.getUniformLocation(collisionProg, 'uVel'), 1);
+    gl.uniform1f(gl.getUniformLocation(collisionProg, 'uSide'), side);
+    gl.uniform1f(gl.getUniformLocation(collisionProg, 'uCollisionRadius'), COLLISION_RADIUS);
+    gl.uniform1f(gl.getUniformLocation(collisionProg, 'uActiveBodies'), activeBodies);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    gl.disableVertexAttribArray(loc);
+    
+    // Read collision results back to CPU
+    gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, collisionData);
+    
+    // Read current position and velocity data
+    let tempFB = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, tempFB);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, curPosTex, 0);
+    gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, curVelTex, 0);
+    gl.readPixels(0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.deleteFramebuffer(tempFB);
+    
+    // Process collisions: destroy slower bodies and spawn new ones
+    const bodiesToDestroy = [];
+    for (let i = 0; i < activeBodies; ++i) {
+        const idx = i * 4;
+        const shouldDestroy = collisionData[idx]; // .x component
+        if (shouldDestroy > 0.5) {
+            bodiesToDestroy.push(i);
+        }
+    }
+    
+    // Destroy bodies (set mass to 0)
+    for (const idx of bodiesToDestroy) {
+        posData[idx * 4 + 3] = 0.0; // Set mass to 0
+        velData[idx * 4] = 0.0;
+        velData[idx * 4 + 1] = 0.0;
+        velData[idx * 4 + 2] = 0.0;
+        velData[idx * 4 + 3] = 0.0;
+    }
+    
+    // Spawn new bodies for each destroyed body
+    for (const idx of bodiesToDestroy) {
+        // Random position on map
+        const px = (Math.random() * 2 - 1) * 0.9; // Keep within bounds
+        const py = (Math.random() * 2 - 1) * 0.9;
+        
+        // Strong initial impulse to escape coalesced masses
+        // Increased significantly to counteract gravitational pull from clusters
+        const angle = Math.random() * 2 * Math.PI;
+        const speed = 0.02 + Math.random() * 0.02; // Strong speed range (0.02-0.04)
+        const vx = Math.cos(angle) * speed;
+        const vy = Math.sin(angle) * speed;
+        
+        // Reuse the destroyed body slot
+        posData[idx * 4] = px;
+        posData[idx * 4 + 1] = py;
+        posData[idx * 4 + 2] = 0.0;
+        posData[idx * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
+        
+        velData[idx * 4] = vx;
+        velData[idx * 4 + 1] = vy;
+        velData[idx * 4 + 2] = 0.0;
+        velData[idx * 4 + 3] = 0.0;
+        
+        // Track spawn
+        spawnCount++;
+    }
+    
+    // Update textures with modified data
+    if (bodiesToDestroy.length > 0) {
+        gl.bindTexture(gl.TEXTURE_2D, curPosTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+        gl.bindTexture(gl.TEXTURE_2D, nextPosTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, posData);
+        gl.bindTexture(gl.TEXTURE_2D, curVelTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+        gl.bindTexture(gl.TEXTURE_2D, nextVelTex);
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, 0, 0, side, side, gl.RGBA, gl.FLOAT, velData);
+    }
+}
 
 function step(dt) {
     // Update velocities (write to nextVelFB, read from curPosTex, curVelTex)
@@ -405,6 +689,12 @@ function step(dt) {
     [curVelFB, nextVelFB] = [nextVelFB, curVelFB];
     [curPosTex, nextPosTex] = [nextPosTex, curPosTex];
     [curPosFB, nextPosFB] = [nextPosFB, curPosFB];
+    
+    // Handle border destruction (bodies that hit borders)
+    handleBorderDestruction();
+    
+    // Handle collisions in Evolve mode
+    handleCollisions();
 }
 
 // Simulation and rendering - loop over activeBodies only:
@@ -438,7 +728,34 @@ function stepSim() { doStep = true; }
 function getSimSpeed() {
     const slider = document.getElementById('speedSlider');
     if (!slider) return 1.0;
-    return Number(slider.value) / 100.0;
+    return Number(slider.value) / 100.0; // Now supports up to 4.0x (400/100)
+}
+
+function resetSpawnRate() {
+    spawnCount = 0;
+    lastSpawnTime = performance.now();
+    spawnRate = 0.0;
+    const spawnRateElement = document.getElementById('spawnRateDisplay');
+    if (spawnRateElement) {
+        spawnRateElement.textContent = '0.00';
+    }
+}
+
+function updateSpawnRate() {
+    const now = performance.now();
+    const elapsed = now - lastSpawnTime;
+    
+    if (elapsed >= SPAWN_RATE_UPDATE_INTERVAL) {
+        spawnRate = (spawnCount / elapsed) * 1000; // Convert to per second
+        spawnCount = 0;
+        lastSpawnTime = now;
+        
+        // Update UI
+        const spawnRateElement = document.getElementById('spawnRateDisplay');
+        if (spawnRateElement) {
+            spawnRateElement.textContent = spawnRate.toFixed(2);
+        }
+    }
 }
 // UI wiring
 window.addEventListener('DOMContentLoaded', () => {
@@ -450,6 +767,7 @@ window.addEventListener('DOMContentLoaded', () => {
     bindClick('resumeBtn', resume);
     bindClick('stepBtn', stepSim);
     bindClick('restartBtn', restartSim);
+    bindClick('clearBtn', clearBodies);
 
     // Split Button Logic
     const patternBtn = document.getElementById('patternBtn');
@@ -483,6 +801,23 @@ window.addEventListener('DOMContentLoaded', () => {
         drawButton.addEventListener('click', () => {
             if (isDrawingMode) disableDrawMode();
             else enableDrawMode();
+        });
+    }
+    
+    const evolveButton = document.getElementById('evolveBtn');
+    if (evolveButton) {
+        evolveButton.addEventListener('click', () => {
+            evolveMode = !evolveMode;
+            if (evolveMode) {
+                evolveButton.classList.add('ring-4', 'ring-yellow-300', 'ring-offset-2', 'ring-offset-slate-900');
+                evolveButton.classList.remove('bg-amber-600', 'hover:bg-amber-500');
+                evolveButton.classList.add('bg-yellow-500', 'hover:bg-yellow-400');
+            } else {
+                evolveButton.classList.remove('ring-4', 'ring-yellow-300', 'ring-offset-2', 'ring-offset-slate-900');
+                evolveButton.classList.remove('bg-yellow-500', 'hover:bg-yellow-400');
+                evolveButton.classList.add('bg-amber-600', 'hover:bg-amber-500');
+                resetSpawnRate(); // Reset when evolve mode is turned off
+            }
         });
     }
 });
@@ -556,7 +891,7 @@ function addBody(px, py) {
     posData[i * 4] = px;
     posData[i * 4 + 1] = py;
     posData[i * 4 + 2] = 0;
-    posData[i * 4 + 3] = 1.2 + Math.random(); // mass > 0 => used
+    posData[i * 4 + 3] = 0.5 + Math.random() * 2.0; // Random mass: 0.5 to 2.5
     velData[i * 4] = (Math.random() - 0.5) * 0.005;
     velData[i * 4 + 1] = (Math.random() - 0.5) * 0.005;
     velData[i * 4 + 2] = 0;
@@ -582,6 +917,7 @@ function animate() {
         doStep = false;
     }
     render();
+    updateSpawnRate();
     requestAnimationFrame(animate);
 }
 animate();
