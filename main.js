@@ -1,5 +1,5 @@
 // WebGL2 N-body GPGPU (N^2) setup
-const N = 1024; // max body slots (was 512)
+const N = 16384; // max body slots (was 1024)
 let activeBodies = 0;
 const canvas = document.getElementById('glCanvas');
 const gl = canvas.getContext('webgl2');
@@ -420,6 +420,7 @@ in float aIdx;
 uniform sampler2D uPos;
 uniform sampler2D uVel;
 uniform float uSide;
+uniform float uPointSize;
 out float vSpeed;
 void main() {
     float idxF = aIdx;
@@ -429,7 +430,7 @@ void main() {
     vec4 vel = texelFetch(uVel, ivec2(int(x),int(y)), 0);
     vSpeed = length(vel.xy);
     gl_Position = vec4(pos.xy, 0, 1);
-    gl_PointSize = 12.0;
+    gl_PointSize = uPointSize;
 }
 `;
 const drawFS = `#version 300 es
@@ -711,6 +712,7 @@ function render() {
     gl.bindTexture(gl.TEXTURE_2D, curVelTex);
     gl.uniform1i(gl.getUniformLocation(drawProg, 'uVel'), 1);
     gl.uniform1f(gl.getUniformLocation(drawProg, 'uSide'), side);
+    gl.uniform1f(gl.getUniformLocation(drawProg, 'uPointSize'), getPointSize());
     gl.bindVertexArray(drawVAO);
     gl.drawArrays(gl.POINTS, 0, activeBodies);
     gl.bindVertexArray(null);
@@ -735,10 +737,16 @@ function getSimSpeed() {
 function getGravity() {
     const slider = document.getElementById('gravitySlider');
     if (!slider) return 0.000003;
-    // Slider 0-100, default 30 (3.0 micro).
-    // Value 30 -> 0.000003
-    // So value * 0.0000001
-    return Number(slider.value) * 0.0000001;
+    // Slider 0-50000, default 3000 (3.000 micro).
+    // Value 3000 -> 0.000003
+    // So value * 0.000000001
+    return Number(slider.value) * 0.000000001;
+}
+
+function getPointSize() {
+    const slider = document.getElementById('sizeSlider');
+    if (!slider) return 12.0;
+    return Number(slider.value);
 }
 
 function resetSpawnRate() {

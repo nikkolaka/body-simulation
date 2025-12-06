@@ -87,7 +87,7 @@
                             class="text-sm font-mono text-indigo-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-indigo-500 appearance-none"
                             value="50">
                     </div>
-                    <input type="range" id="bodyCountSlider" min="1" max="1024" value="50" step="1"
+                    <input type="range" id="bodyCountSlider" min="1" max="16384" value="50" step="1"
                         class="w-full cursor-pointer accent-indigo-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
                 </div>
 
@@ -109,15 +109,30 @@
                 <div class="space-y-2 pt-2">
                     <div
                         class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
+                        <span>Particle Size</span>
+                        <div class="flex items-center gap-1">
+                            <input type="number" id="sizeInput"
+                                class="text-sm font-mono text-sky-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-sky-500 appearance-none"
+                                value="12.0" step="0.1">
+                            <span class="text-sm font-mono text-sky-300">px</span>
+                        </div>
+                    </div>
+                    <input type="range" id="sizeSlider" min="1" max="50" value="12" step="0.5"
+                        class="w-full cursor-pointer accent-sky-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
+                </div>
+
+                <div class="space-y-2 pt-2">
+                    <div
+                        class="flex items-center justify-between text-xs uppercase tracking-[0.2em] text-slate-400 font-bold">
                         <span>Gravity</span>
                         <div class="flex items-center gap-1">
                             <input type="number" id="gravityInput"
-                                class="text-sm font-mono text-amber-300 bg-transparent w-16 text-right focus:outline-none focus:border-b focus:border-amber-500 appearance-none"
-                                value="3.0" step="0.1">
+                                class="text-sm font-mono text-amber-300 bg-transparent w-20 text-right focus:outline-none focus:border-b focus:border-amber-500 appearance-none"
+                                value="3.000" step="0.001">
                             <span class="text-sm font-mono text-amber-300">µ</span>
                         </div>
                     </div>
-                    <input type="range" id="gravitySlider" min="0" max="500" value="30" step="1"
+                    <input type="range" id="gravitySlider" min="0" max="50000" value="3000" step="1"
                         class="w-full cursor-pointer accent-amber-500 h-1.5 rounded-full bg-slate-600 appearance-none hover:bg-slate-500 transition-colors">
                 </div>
             </div>
@@ -167,7 +182,8 @@
 
             setupControl('bodyCountSlider', 'bodyCountInput', 1, 0);
             setupControl('speedSlider', 'speedInput', 0.01, 2);
-            setupControl('gravitySlider', 'gravityInput', 0.1, 1);
+            setupControl('sizeSlider', 'sizeInput', 1, 1);
+            setupControl('gravitySlider', 'gravityInput', 0.001, 3);
         });
     </script>
 </body>
